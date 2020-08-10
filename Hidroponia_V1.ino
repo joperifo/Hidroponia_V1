@@ -18,8 +18,8 @@ float WaterTemp=0;
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature WaterTempSensor(&oneWire);
 
+#pragma region Init Setup
 void setup() {
-
   //Init Serial
   Serial.begin(115200);
   //TDS Sensor
@@ -32,6 +32,7 @@ void setup() {
   Serial.println();
   
 }
+#pragma endregion
 
 void loop() {
 
