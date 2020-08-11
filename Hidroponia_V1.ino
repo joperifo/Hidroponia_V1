@@ -1,46 +1,47 @@
 #include <EEPROM.h>
 #include <dht.h>
-#include <OneWire.h>
 #include <GravityTDS.h>
+#include <OneWire.h>
 #include <DallasTemperature.h>
 #include <SPI.h>
 #include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+#include "SSD1306Ascii.h"
+#include "SSD1306AsciiWire.h"
 
 
 //Pins Define
 #define TdsSensorPin A0
 #define PhSensorPin A1          
-#define DHT11_PIN A2
-#define ONE_WIRE_BUS 2
-#define WaterPump 3
-#define Ph_Up_Valve 4
-#define Nutrients_Valve 5
-#define Water_Valve 6
+#define DHT11_PIN 2
+#define ONE_WIRE_BUS 3
+#define WaterPump 4
+#define Ph_Up_Valve 5
+#define Nutrients_Valve 6
+#define Water_Valve 7
 
-#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
 
 //Global define
+#define DHTTYPE DHT11   // DHT 11
 #define VOLTAGE 5.00    //system voltage
 #define PH_OFFSET 0        //zero drift voltage
 #define PhArrayLenth  40    //PH sensor number of samples
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+
+#define I2C_ADDRESS 0x3C    //OLED Display
+#define RST_PIN -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+
+SSD1306AsciiWire oled;
+dht DHT;
 
 GravityTDS SensorTDS;
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature WaterTempSensor(&oneWire);
-dht DHT;
-
-// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 //Global Vars
 int PhArray[PhArrayLenth];
 int PhArrayIndex=0;
 double PhValue_mV;
 float PhValue;
+float Ext_Humidity, Ext_Temperature;
 
 float temperature = 25,tdsValue = 0;
 
@@ -53,32 +54,104 @@ float WaterTemp=0;
 void setup() {
   //Init Serial
   Serial.begin(115200);
+  //OLED Display init
+  Wire.begin();
+  Wire.setClock(400000L);
+  oled.begin(&Adafruit128x64, I2C_ADDRESS);
+  oled.setFont(Arial_bold_14);
+  //Splash Screen
+  oled.clear();
+  oled.setCursor(15,0);
+  oled.println("Hidroponia V1.0");
+  oled.setCursor(0,10);
+  oled.println("================");
+  oled.setCursor(25,30);
+  oled.println("Joao Fontes");
+  oled.setCursor(0,40);
+  oled.println("================");
+
+  delay(3000);
+  
   //TDS Sensor
   InitSensorTDS();
+  //Splash Screen TDS Sensor
+  oled.clear();
+  oled.setCursor(15,0);
+  oled.println("TDS Sensor");
+  oled.setCursor(0,10);
+  oled.println("================");
+  oled.setCursor(50,30);
+  oled.println("OK");
+  oled.setCursor(0,40);
+  oled.println("================");
+
+  delay(1000);
+  
   //Water Temperature Sensor
   WaterTempSensor.begin();
-  //DHT11 Test
+
+  //Splash Screen Water Temperature Sensor
+  oled.clear();
+  oled.setCursor(0,0);
+  oled.println("Water Sensor");
+  oled.setCursor(0,10);
+  oled.println("================");
+  oled.setCursor(50,30);
+  oled.println("OK");
+  oled.setCursor(0,40);
+  oled.println("================");
+
+  delay(1000);
+  
+  //DHT11 Test 
   Serial.print("LIBRARY VERSION: ");
   Serial.println(DHT_LIB_VERSION);
   Serial.println(); 
-  //OLED display
-  //Wire.begin();
-  //display.begin(SSD1306_SWITCHCAPVCC, 0x3C); //Init display at 0x3C I2C Addr
-  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
-  Serial.println("OLED Display - SSD1306 allocation failed");
-  for(;;); // Don't proceed, loop forever
-  }  
-  display.setTextColor(WHITE); //OLED display Text color
-  display.setTextSize(1); //OLED display text size
-  display.clearDisplay(); //Clear display
-
-  display.setCursor(10,10); //POSIÇÃO EM QUE O CURSOR IRÁ FAZER A ESCRITA
-  display.print("Hidroponia V1.0"); //ESCREVE O TEXTO NO DISPLAY
-  display.display(); //EFETIVA A ESCRITA NO DISPLAY
-  display.setCursor(10,40); //POSIÇÃO EM QUE O CURSOR IRÁ FAZER A ESCRITA
-  display.print("OLED Display Started"); //ESCREVE O TEXTO NO DISPLAY
-  display.display(); //EFETIVA A ESCRITA NO DISPLAY
-  delay(2000);
+ int chk = DHT.read11(DHT11_PIN);
+  switch (chk)
+  {
+    case DHTLIB_OK:  
+    Serial.print("OK,\t"); 
+    //Splash Screen Water Temperature Sensor
+    oled.clear();
+    oled.setCursor(20,0);
+    oled.println("DHT11 Sensor");
+    oled.setCursor(0,10);
+    oled.println("================");
+    oled.setCursor(50,30);
+    oled.println("OK");
+    oled.setCursor(43,40);
+    oled.println(DHT_LIB_VERSION);
+  
+    delay(1000);    
+    break;
+    case DHTLIB_ERROR_CHECKSUM: 
+    Serial.print("Checksum error,\t"); 
+    for(;;);
+    break;
+    case DHTLIB_ERROR_TIMEOUT: 
+    Serial.print("Time out error,\t"); 
+    for(;;);
+    break;
+    case DHTLIB_ERROR_CONNECT:
+        Serial.print("Connect error,\t");
+        for(;;);
+        break;
+    case DHTLIB_ERROR_ACK_L:
+        Serial.print("Ack Low error,\t");
+        for(;;);
+        break;
+    case DHTLIB_ERROR_ACK_H:
+        Serial.print("Ack High error,\t");
+        for(;;);
+        break;
+    default: 
+    Serial.print("Unknown error,\t"); 
+    for(;;);
+    break;
+  }
+  
+  oled.clear();
 }
 #pragma endregion
 
@@ -112,7 +185,7 @@ void loop() {
 
       if(timmer_1s >= 1)
       {
-
+        PrintValuestoOLED(); //Print values to OLED Display
         timmer_1s=0;
       }
 
@@ -125,20 +198,21 @@ void loop() {
       if(timmer_5s>5)
         {
         #pragma region Exterior Temp and Humidity
-          DHT.read11(DHT11_PIN);
+          Ext_Humidity = DHT.humidity;
           Serial.print("Current humidity = ");
-          Serial.print(DHT.humidity);
-          Serial.print("%  ");
+          Serial.print(Ext_Humidity);
+          Serial.print(" %");
           Serial.print("temperature = ");
-          Serial.print(DHT.temperature); 
-          Serial.println("C  ");
+          Ext_Temperature = DHT.temperature;
+          Serial.print(Ext_Temperature); 
+          Serial.println(" C");
         #pragma endregion 
         
         #pragma region Water Temperature Read
-        WaterTempSensor.requestTemperatures(); 
-        WaterTemp=WaterTempSensor.getTempCByIndex(0);      
-        Serial.print(" Water Temperature= ");
-        Serial.print(WaterTemp);
+        //WaterTempSensor.requestTemperatures(); 
+        //WaterTemp=WaterTempSensor.getTempCByIndex(0);      
+        //Serial.print(" Water Temperature= ");
+        //Serial.print(WaterTemp);
         #pragma endregion        
         
         #pragma region Water TDS Read
@@ -152,11 +226,9 @@ void loop() {
         #pragma region PH Sensor read
         //Line equation y=−0.016903313049357674x+7  or  y=−59.160000000000004x+414.12
         PhValue=(0.01690*PhValue_mV)+7;
-        Serial.println("PH = ");
+        Serial.print("PH = ");
         Serial.println(PhValue,0);
-        #pragma endregion
-
-        PrintValuestoOLED(); //Print values to OLED Display
+        #pragma endregion        
 
         timmer_5s=0;
         }
@@ -280,64 +352,34 @@ double avergearray(int* arr, int number){
 void PrintValuestoOLED()
 {
   //clear display
-  display.clearDisplay();
+  oled.clear();
 
   // display exterior temperature
-  display.setTextSize(1);
-  display.setCursor(5,0);
-  display.print("Exterior: ");
-  display.setTextSize(2);
-  display.setCursor(5,60);
-  display.print(DHT.temperature);
-  display.print(" ");
-  display.setTextSize(1);
-  display.cp437(true);
-  display.write(167);
-  display.setTextSize(2);
-  display.print("C");
+  oled.print("Ext:");
+  oled.print(Ext_Temperature,1);
+  oled.print("'C");
 
-  // display exterior humidity
-  display.setTextSize(1);
-  display.setCursor(5, 100);
-  display.print(" / ");
-  display.setTextSize(2);
-  display.setCursor(5, 120);
-  display.print(DHT.humidity);
-  display.print(" %"); 
+  
+
+  // display exterior humidity 
+  oled.print("/R.H:");
+  oled.print(Ext_Humidity,1);
+  oled.println("%");
 
   // display water temperature
-  display.setTextSize(1);
-  display.setCursor(40,0);
-  display.print("Water: ");
-  display.setTextSize(2);
-  display.setCursor(40,60);
-  display.print(WaterTemp);
-  display.print(" ");
-  display.setTextSize(1);
-  display.cp437(true);
-  display.write(167);
-  display.setTextSize(2);
-  display.print("C");
+  oled.print("Water: ");
+  oled.print(WaterTemp,1);
+  oled.println("'C"); 
+  
 
   // display pH Value
-  display.setTextSize(1);
-  display.setCursor(80, 0);
-  display.print("pH: ");
-  display.setTextSize(2);
-  display.setCursor(80, 50);
-  display.print(PhValue);
+  oled.print("pH:  ");
+  oled.println(PhValue,1);
 
   // display TDS Value
-  display.setTextSize(1);
-  display.setCursor(80, 100);
-  display.print("Tds: ");
-  display.setTextSize(2);
-  display.setCursor(80, 140);
-  display.print(tdsValue);
-  display.print(" ppm");
- 
-  
-  display.display();
+  oled.print("Tds: ");
+  oled.print(tdsValue,1);
+  oled.println(" ppm");
   
 }
 
