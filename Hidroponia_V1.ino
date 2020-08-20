@@ -37,6 +37,7 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature WaterTempSensor(&oneWire);
 
 //Global Vars
+bool FirstCycle = 1;
 int PhArray[PhArrayLenth];
 int PhArrayIndex=0;
 double PhValue_mV;
@@ -45,7 +46,7 @@ float Ext_Humidity, Ext_Temperature;
 
 float temperature = 25,tdsValue = 0;
 
-uint32_t ticks, last_tick_20ms, last_tick_1000ms,timmer_1s, timmer_5s, timmer_1m, timmer_10m, timmer_30m, timmer_1h ;
+uint32_t ticks, last_tick_20ms, last_tick_1000ms,timmer_1s,timmer_2s, timmer_5s, timmer_1m, timmer_10m, timmer_30m, timmer_1h ;
 float WaterTemp=0;
 
 
@@ -70,7 +71,7 @@ void setup() {
   oled.setCursor(0,40);
   oled.println("================");
 
-  delay(3000);
+  delay(1500);
   
   //TDS Sensor
   InitSensorTDS();
@@ -111,7 +112,8 @@ void setup() {
   switch (chk)
   {
     case DHTLIB_OK:  
-    Serial.print("OK,\t"); 
+    Serial.println("OK\t"); 
+    Serial.println(); 
     //Splash Screen Water Temperature Sensor
     oled.clear();
     oled.setCursor(20,0);
@@ -126,27 +128,81 @@ void setup() {
     delay(1000);    
     break;
     case DHTLIB_ERROR_CHECKSUM: 
-    Serial.print("Checksum error,\t"); 
+    Serial.println("Checksum error,\t"); 
+    oled.clear();
+    oled.setCursor(20,0);
+    oled.println("DHT11 Sensor");
+    oled.setCursor(0,10);
+    oled.println("================");
+    oled.setCursor(50,30);
+    oled.println("NOK 1");
+    oled.setCursor(43,40);
+    oled.println(DHT_LIB_VERSION);
     for(;;);
     break;
     case DHTLIB_ERROR_TIMEOUT: 
-    Serial.print("Time out error,\t"); 
+    Serial.println("Time out error,\t"); 
+    oled.clear();
+    oled.setCursor(20,0);
+    oled.println("DHT11 Sensor");
+    oled.setCursor(0,10);
+    oled.println("================");
+    oled.setCursor(50,30);
+    oled.println("NOK 2");
+    oled.setCursor(43,40);
+    oled.println(DHT_LIB_VERSION);
     for(;;);
     break;
     case DHTLIB_ERROR_CONNECT:
-        Serial.print("Connect error,\t");
+        Serial.println("Connect error,\t");
+        oled.clear();
+        oled.setCursor(20,0);
+        oled.println("DHT11 Sensor");
+        oled.setCursor(0,10);
+        oled.println("================");
+        oled.setCursor(15,30);
+        oled.println("Not Connected!");
+        oled.setCursor(43,40);
+        oled.println(DHT_LIB_VERSION);
         for(;;);
         break;
     case DHTLIB_ERROR_ACK_L:
-        Serial.print("Ack Low error,\t");
+        Serial.println("Ack Low error,\t");
+        oled.clear();
+        oled.setCursor(20,0);
+        oled.println("DHT11 Sensor");
+        oled.setCursor(0,10);
+        oled.println("================");
+        oled.setCursor(50,30);
+        oled.println("NOK 3");
+        oled.setCursor(43,40);
+        oled.println(DHT_LIB_VERSION);
         for(;;);
         break;
     case DHTLIB_ERROR_ACK_H:
-        Serial.print("Ack High error,\t");
+        Serial.println("Ack High error,\t");
+        oled.clear();
+        oled.setCursor(20,0);
+        oled.println("DHT11 Sensor");
+        oled.setCursor(0,10);
+        oled.println("================");
+        oled.setCursor(50,30);
+        oled.println("NOK 4");
+        oled.setCursor(43,40);
+        oled.println(DHT_LIB_VERSION);
         for(;;);
         break;
     default: 
-    Serial.print("Unknown error,\t"); 
+    Serial.println("Unknown error,\t"); 
+    oled.clear();
+    oled.setCursor(20,0);
+    oled.println("DHT11 Sensor");
+    oled.setCursor(0,10);
+    oled.println("================");
+    oled.setCursor(50,30);
+        oled.println("NOK 5");
+    oled.setCursor(43,40);
+    oled.println(DHT_LIB_VERSION);
     for(;;);
     break;
   }
@@ -185,8 +241,21 @@ void loop() {
 
       if(timmer_1s >= 1)
       {
-        PrintValuestoOLED(); //Print values to OLED Display
-        timmer_1s=0;
+        timmer_1s=0;        
+      }
+
+      #pragma endregion
+
+      #pragma region 2 second loop
+
+      timmer_2s++;
+
+      if(timmer_2s >= 2 or FirstCycle)
+      {
+                
+        
+        timmer_2s=0;
+        
       }
 
       #pragma endregion
@@ -195,24 +264,25 @@ void loop() {
 
       timmer_5s++;
 
-      if(timmer_5s>5)
-        {
+      if(timmer_5s>5 or FirstCycle)
+        {                   
+
         #pragma region Exterior Temp and Humidity
-          Ext_Humidity = DHT.humidity;
-          Serial.print("Current humidity = ");
-          Serial.print(Ext_Humidity);
-          Serial.print(" %");
-          Serial.print("temperature = ");
-          Ext_Temperature = DHT.temperature;
-          Serial.print(Ext_Temperature); 
-          Serial.println(" C");
-        #pragma endregion 
-        
+        Ext_Humidity = DHT.humidity;
+        Serial.print("Current humidity = ");
+        Serial.print(Ext_Humidity);
+        Serial.print(" %");
+        Serial.print("temperature = ");
+        Ext_Temperature = DHT.temperature;
+        Serial.print(Ext_Temperature); 
+        Serial.println(" C");
+        #pragma endregion
+
         #pragma region Water Temperature Read
-        //WaterTempSensor.requestTemperatures(); 
-        //WaterTemp=WaterTempSensor.getTempCByIndex(0);      
-        //Serial.print(" Water Temperature= ");
-        //Serial.print(WaterTemp);
+//        WaterTempSensor.requestTemperatures(); 
+//        WaterTemp=WaterTempSensor.getTempCByIndex(0);      
+//        Serial.print(" Water Temperature= ");
+//        Serial.println(WaterTemp);
         #pragma endregion        
         
         #pragma region Water TDS Read
@@ -228,9 +298,13 @@ void loop() {
         PhValue=(0.01690*PhValue_mV)+7;
         Serial.print("PH = ");
         Serial.println(PhValue,0);
-        #pragma endregion        
-
+        #pragma endregion
+        
+        PrintValuestoOLED(); //Print values to OLED Display
+         
         timmer_5s=0;
+        FirstCycle=false;
+
         }
 
         #pragma endregion
@@ -374,12 +448,13 @@ void PrintValuestoOLED()
 
   // display pH Value
   oled.print("pH:  ");
-  oled.println(PhValue,1);
+  oled.print(PhValue,1);
+  oled.println("  ");
 
   // display TDS Value
   oled.print("Tds: ");
   oled.print(tdsValue,1);
-  oled.println(" ppm");
+  oled.println(" ppm  ");
   
 }
 
