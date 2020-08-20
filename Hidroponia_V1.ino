@@ -268,6 +268,7 @@ void loop() {
         {                   
 
         #pragma region Exterior Temp and Humidity
+        DHT.read11(DHT11_PIN);
         Ext_Humidity = DHT.humidity;
         Serial.print("Current humidity = ");
         Serial.print(Ext_Humidity);
