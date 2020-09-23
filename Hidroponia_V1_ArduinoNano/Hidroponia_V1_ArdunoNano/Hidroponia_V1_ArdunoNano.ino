@@ -25,6 +25,8 @@
 #define VOLTAGE 5.00    //system voltage
 #define PH_OFFSET 0        //zero drift voltage
 #define PhArrayLenth  40    //PH sensor number of samples
+#define VREF 5.0 // analog reference voltage(Volt) of the ADC
+#define SCOUNT 30 // sum of sample point
 
 #define I2C_ADDRESS 0x3C    //OLED Display
 #define RST_PIN -1 // Reset pin # (or -1 if sharing Arduino reset pin)
@@ -44,9 +46,18 @@ double PhValue_mV;
 float PhValue;
 float Ext_Humidity, Ext_Temperature;
 
-float temperature = 25,tdsValue = 0;
+//Ph vars
+unsigned long int avgValue;  //Store the average value of the sensor feedback
+float b;
+int buf[10],temp;
 
-uint32_t ticks, last_tick_20ms, last_tick_1000ms,timmer_1s,timmer_2s, timmer_5s, timmer_1m, timmer_10m, timmer_30m, timmer_1h ;
+
+int analogBuffer[SCOUNT]; // store the analog value in the array, read from ADC
+int analogBufferTemp[SCOUNT];
+int analogBufferIndex = 0,copyIndex = 0;
+float averageVoltage = 0,tdsValue = 0;
+
+uint32_t ticks, last_tick_20ms,last_tick_40ms, last_tick_800ms, last_tick_1000ms,timmer_1s,timmer_2s, timmer_5s, timmer_1m, timmer_10m, timmer_30m, timmer_1h ;
 float WaterTemp=0;
 
 
@@ -224,13 +235,48 @@ void loop() {
     if (PhArrayIndex==PhArrayLenth) {
       PhArrayIndex=0;
     }   
-    PhValue_mV=((30*(double)VOLTAGE*1000)-(75*avergearray(PhArray, PhArrayLenth)*VOLTAGE*1000/1024))/75-PH_OFFSET;   //convert the analog value to Ph_mV according the circuit
-
+    //PhValue_mV=((30*(double)VOLTAGE*1000)-(75*avergearray(PhArray, PhArrayLenth)*VOLTAGE*1000/1024))/75-PH_OFFSET;   //convert the analog value to Ph_mV according the circuit
+    PhValue=(float)avergearray(PhArray, PhArrayLenth)*5.0/1024/6; //convert the analog into millivolt
     #pragma endregion
 
     last_tick_20ms=ticks;
   }
 
+  //40ms timer
+  if((ticks - last_tick_40ms) > 40)
+    {
+      #pragma region TDS sample collect
+
+      analogBuffer[analogBufferIndex] = analogRead(TdsSensorPin); //read the analog value and store into the buffer
+      analogBufferIndex++;
+      if(analogBufferIndex == SCOUNT)
+      analogBufferIndex = 0;
+
+      #pragma endregion
+
+      last_tick_40ms=ticks;
+    }
+
+
+  //800ms timer
+  if((ticks - last_tick_800ms) > 800)
+    {
+      #pragma region Calculate tds value with temperature compensation
+
+      for(copyIndex=0;copyIndex<SCOUNT;copyIndex++)
+      analogBufferTemp[copyIndex]= analogBuffer[copyIndex];
+      averageVoltage = getMedianNum(analogBufferTemp,SCOUNT) * (float)VREF/ 1024.0; // read the analog value more stable by the median filtering algorithm, and convert to voltage value
+      float compensationCoefficient=1.0+0.02*(WaterTemp-25.0); //temperature compensation formula: fFinalResult(25^C) = fFinalResult(current)/(1.0+0.02*(fTP-25.0));
+      float compensationVolatge=averageVoltage/compensationCoefficient; //temperature compensation
+      tdsValue=(133.42*compensationVolatge*compensationVolatge*compensationVolatge - 255.86*compensationVolatge*compensationVolatge + 857.39*compensationVolatge)*0.5; //convert voltage value to tds value
+      //Serial.print("voltage:");
+      //Serial.print(averageVoltage,2);
+      //Serial.print("V ");
+
+      #pragma endregion
+
+      last_tick_800ms=ticks;
+    }
   //1000ms timer
   if ((ticks - last_tick_1000ms) > 1000)
     { 
@@ -270,35 +316,40 @@ void loop() {
         #pragma region Exterior Temp and Humidity
         DHT.read11(DHT11_PIN);
         Ext_Humidity = DHT.humidity;
+        Serial.println("-----NEW DATA-----");
         Serial.print("Current humidity = ");
         Serial.print(Ext_Humidity);
         Serial.print(" %");
-        Serial.print("temperature = ");
+        Serial.print("    temperature = ");
         Ext_Temperature = DHT.temperature;
         Serial.print(Ext_Temperature); 
         Serial.println(" C");
         #pragma endregion
 
         #pragma region Water Temperature Read
-//        WaterTempSensor.requestTemperatures(); 
-//        WaterTemp=WaterTempSensor.getTempCByIndex(0);      
-//        Serial.print(" Water Temperature= ");
-//        Serial.println(WaterTemp);
+        WaterTempSensor.requestTemperatures(); 
+        WaterTemp=WaterTempSensor.getTempCByIndex(0);      
+        Serial.print("Water Temperature= ");
+        Serial.print(WaterTemp);
+        Serial.println(" C");
         #pragma endregion        
         
-        #pragma region Water TDS Read
-        SensorTDS.setTemperature(WaterTemp);  // set the temperature and execute temperature compensation
-        SensorTDS.update();  //sample and calculate 
-        tdsValue = SensorTDS.getTdsValue();  // then get the value
+        #pragma region Print Water TDS Read
+        Serial.println("-----TDS-----");
         Serial.print(tdsValue,0);
         Serial.println("ppm");
+        Serial.print("voltage:");
+        Serial.print(averageVoltage,2);
+        Serial.println("V ");
         #pragma endregion  
           
         #pragma region PH Sensor read
+        Serial.println("-----PH-----");
         //Line equation y=−0.016903313049357674x+7  or  y=−59.160000000000004x+414.12
-        PhValue=(0.01690*PhValue_mV)+7;
+        //PhValue=(0.01690*PhValue_mV)+7;
+        PhValue=3.5*PhValue;                      //convert the millivolt into pH value
         Serial.print("PH = ");
-        Serial.println(PhValue,0);
+        Serial.println(PhValue,2);
         #pragma endregion
         
         PrintValuestoOLED(); //Print values to OLED Display
@@ -370,6 +421,7 @@ void loop() {
 #pragma region InitSensorTDS
 void InitSensorTDS()
 {
+  pinMode(TdsSensorPin,INPUT);
   SensorTDS.setPin(TdsSensorPin);
   SensorTDS.setAref(5.0);  //reference voltage on ADC, default 5.0V on Arduino UNO
   SensorTDS.setAdcRange(1024);  //1024 for 10bit ADC;4096 for 12bit ADC
@@ -459,6 +511,34 @@ void PrintValuestoOLED()
   
 }
 
+#pragma endregion
+
+#pragma region TDS Aux functions
+
+int getMedianNum(int bArray[], int iFilterLen)
+{
+  int bTab[iFilterLen];
+  for (byte i = 0; i<iFilterLen; i++)
+  bTab[i] = bArray[i];
+  int i, j, bTemp;
+  for (j = 0; j < iFilterLen - 1; j++)
+  {
+  for (i = 0; i < iFilterLen - j - 1; i++)
+  {
+  if (bTab[i] > bTab[i + 1])
+  {
+  bTemp = bTab[i];
+  bTab[i] = bTab[i + 1];
+  bTab[i + 1] = bTemp;
+  }
+  }
+  }
+  if ((iFilterLen & 1) > 0)
+  bTemp = bTab[(iFilterLen - 1) / 2];
+  else
+  bTemp = (bTab[iFilterLen / 2] + bTab[iFilterLen / 2 - 1]) / 2;
+  return bTemp;
+}
 #pragma endregion
 
 #pragma endregion

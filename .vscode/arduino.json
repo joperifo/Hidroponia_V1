@@ -1,5 +1,5 @@
 {
-    "sketch": "Hidroponia_V1.ino",
+    "sketch": "Hidroponia_V1_ArduinoNano\\Hidroponia_V1_ArdunoNano\\Hidroponia_V1_ArdunoNano.ino",
     "board": "arduino:avr:nano",
     "configuration": "cpu=atmega328old",
     "port": "COM3"
