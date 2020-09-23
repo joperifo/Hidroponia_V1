@@ -40,17 +40,15 @@ DallasTemperature WaterTempSensor(&oneWire);
 
 //Global Vars
 bool FirstCycle = 1;
-int PhArray[PhArrayLenth];
-int PhArrayIndex=0;
 double PhValue_mV;
 float PhValue;
 float Ext_Humidity, Ext_Temperature;
 
 //Ph vars
-unsigned long int avgValue;  //Store the average value of the sensor feedback
-float b;
-int buf[10],temp;
-
+int ph_samples = 20;
+int ph_samples_cnt = 0;
+float adc_resolution = 1024.0;
+int ph_measurings=0;
 
 int analogBuffer[SCOUNT]; // store the analog value in the array, read from ADC
 int analogBufferTemp[SCOUNT];
@@ -229,14 +227,19 @@ void loop() {
   //20ms timer Ph Samples
   if((ticks - last_tick_20ms) > 20)
   {
-    #pragma region Ph Sensor read
+    #pragma region Ph Sensor read    
     
-    PhArray[PhArrayIndex++]=analogRead(PhSensorPin);
-    if (PhArrayIndex==PhArrayLenth) {
-      PhArrayIndex=0;
-    }   
-    //PhValue_mV=((30*(double)VOLTAGE*1000)-(75*avergearray(PhArray, PhArrayLenth)*VOLTAGE*1000/1024))/75-PH_OFFSET;   //convert the analog value to Ph_mV according the circuit
-    PhValue=(float)avergearray(PhArray, PhArrayLenth)*5.0/1024/6; //convert the analog into millivolt
+    ph_measurings += analogRead(PhSensorPin);
+    
+    ph_samples_cnt++;
+    
+    if(ph_samples_cnt == ph_samples)
+    {
+      PhValue_mV=5 / adc_resolution * ph_measurings/ph_samples;
+      ph_samples_cnt=0;
+      ph_measurings=0;
+    }
+            
     #pragma endregion
 
     last_tick_20ms=ticks;
@@ -345,11 +348,11 @@ void loop() {
           
         #pragma region PH Sensor read
         Serial.println("-----PH-----");
-        //Line equation y=−0.016903313049357674x+7  or  y=−59.160000000000004x+414.12
-        //PhValue=(0.01690*PhValue_mV)+7;
-        PhValue=3.5*PhValue;                      //convert the millivolt into pH value
+        PhValue = ph(PhValue_mV);    
         Serial.print("PH = ");
         Serial.println(PhValue,2);
+        Serial.print(PhValue_mV);
+        Serial.println(" mV");
         #pragma endregion
         
         PrintValuestoOLED(); //Print values to OLED Display
@@ -429,50 +432,6 @@ void InitSensorTDS()
 }
 #pragma endregion
 
-#pragma region Ph Sensor Samples Average
-
-double avergearray(int* arr, int number){
-  int i;
-  int max,min;
-  double avg;
-  long amount=0;
-  if(number<=0){
-    printf("Error number for the array to avraging!/n");
-    return 0;
-  }
-  if(number<5){   //less than 5, calculated directly statistics
-    for(i=0;i<number;i++){
-      amount+=arr[i];
-    }
-    avg = amount/number;
-    return avg;
-  }else{
-    if(arr[0]<arr[1]){
-      min = arr[0];max=arr[1];
-    }
-    else{
-      min=arr[1];max=arr[0];
-    }
-    for(i=2;i<number;i++){
-      if(arr[i]<min){
-        amount+=min;        //arr<min
-        min=arr[i];
-      }else {
-        if(arr[i]>max){
-          amount+=max;    //arr>max
-          max=arr[i];
-        }else{
-          amount+=arr[i]; //min<=arr<=max
-        }
-      }
-    }
-    avg = (double)amount/(number-2);
-  }
-
-  return avg;
-}
-
-#pragma endregion
 
 #pragma region OLED display print values
 
@@ -509,6 +468,14 @@ void PrintValuestoOLED()
   oled.print(tdsValue,1);
   oled.println(" ppm  ");
   
+}
+
+#pragma endregion
+
+#pragma region Ph Aux functions
+
+float ph(float voltage){
+  return 7 + ((2.5 - voltage) / 0.18);
 }
 
 #pragma endregion
