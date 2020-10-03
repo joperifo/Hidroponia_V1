@@ -7,6 +7,8 @@
 #include <Wire.h>
 #include "SSD1306Ascii.h"
 #include "SSD1306AsciiWire.h"
+#include <SoftwareSerial.h>
+#include <ArduinoJson.h>
 
 
 //Pins Define
@@ -14,10 +16,6 @@
 #define PhSensorPin A1          
 #define DHT11_PIN 2
 #define ONE_WIRE_BUS 3
-#define WaterPump 4
-#define Ph_Up_Valve 5
-#define Nutrients_Valve 6
-#define Water_Valve 7
 #define RelayPin_1 9
 #define RelayPin_2 10
 
@@ -39,6 +37,7 @@ dht DHT;
 GravityTDS SensorTDS;
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature WaterTempSensor(&oneWire);
+SoftwareSerial s(5,6); //Rx D5 Tx D6
 
 //Global Vars
 bool FirstCycle = 1;
@@ -67,13 +66,10 @@ float WaterTemp=0;
 
 #pragma region Init Setup
 void setup() {
-  pinMode(RelayPin_1,OUTPUT);
-  pinMode(RelayPin_2,OUTPUT);
-  digitalWrite(RelayPin_1,HIGH);
-  digitalWrite(RelayPin_2,HIGH);
-
   //Init Serial
   Serial.begin(115200);
+  //Init Sotware Serial
+  s.begin(115200);
   //OLED Display init
   Wire.begin();
   Wire.setClock(400000L);
@@ -230,8 +226,25 @@ void setup() {
 }
 #pragma endregion
 
+DynamicJsonDocument jsonDoc(1000);
+DeserializationError error = deserializeJson(jsonDoc, s);
+
 void loop() {
   
+  #pragma region Send values to JSON Serial
+
+  jsonDoc["Ph_Value"]=PhValue;
+  jsonDoc["Tds_Value"]=tdsValue;
+  jsonDoc["ExtTemp"]=Ext_Temperature;
+  jsonDoc["ExtHum"]=Ext_Temperature;
+  jsonDoc["WaterTemp"]=WaterTemp;
+
+  if(s.available()>0)
+  {
+    serializeJson(jsonDoc, s);
+  }
+  #pragma endregion
+
   ticks = millis();
 
   //20ms timer Ph Samples

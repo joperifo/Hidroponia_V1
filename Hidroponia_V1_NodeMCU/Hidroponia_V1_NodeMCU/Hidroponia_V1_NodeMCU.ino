@@ -159,6 +159,7 @@ void loop() {
   ExtHum=jsonDoc["ExtHum"];
   WaterTemp=jsonDoc["WaterTemp"];
 
+
   #pragma endregion
 
   ticks = millis();
@@ -231,6 +232,21 @@ void loop() {
         
       input = input -0.3;
      
+     #pragma region Print JSON values to Serial
+      if(!error)
+      {
+          Serial.print("JSON pH Value=");
+          Serial.println(Ph_Value);
+          Serial.print("JSON Tds Value=");
+          Serial.println(Tds_Value);
+          Serial.print("JSON External Temperature=");
+          Serial.println(ExtTemp);
+          Serial.print("JSON External Humidity=");
+          Serial.println(ExtHum);
+          Serial.print("JSON Water Temperature=");
+          Serial.println(WaterTemp);
+      }
+      #pragma endregion
 
       Serial.println("\n\nInput:");
       Serial.print("\t\tPH:");
