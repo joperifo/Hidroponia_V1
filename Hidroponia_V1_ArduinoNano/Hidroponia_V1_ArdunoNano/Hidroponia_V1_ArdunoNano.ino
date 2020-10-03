@@ -18,6 +18,8 @@
 #define Ph_Up_Valve 5
 #define Nutrients_Valve 6
 #define Water_Valve 7
+#define RelayPin_1 9
+#define RelayPin_2 10
 
 
 //Global define
@@ -55,6 +57,9 @@ int analogBufferTemp[SCOUNT];
 int analogBufferIndex = 0,copyIndex = 0;
 float averageVoltage = 0,tdsValue = 0;
 
+int toogleRelay_1=0;
+int toogleRelay_2=1;
+
 uint32_t ticks, last_tick_20ms,last_tick_40ms, last_tick_800ms, last_tick_1000ms,timmer_1s,timmer_2s, timmer_5s, timmer_1m, timmer_10m, timmer_30m, timmer_1h ;
 float WaterTemp=0;
 
@@ -62,6 +67,11 @@ float WaterTemp=0;
 
 #pragma region Init Setup
 void setup() {
+  pinMode(RelayPin_1,OUTPUT);
+  pinMode(RelayPin_2,OUTPUT);
+  digitalWrite(RelayPin_1,HIGH);
+  digitalWrite(RelayPin_2,HIGH);
+
   //Init Serial
   Serial.begin(115200);
   //OLED Display init
@@ -221,7 +231,7 @@ void setup() {
 #pragma endregion
 
 void loop() {
-
+  
   ticks = millis();
 
   //20ms timer Ph Samples
@@ -289,7 +299,7 @@ void loop() {
       timmer_1s++;
 
       if(timmer_1s >= 1)
-      {
+      {        
         timmer_1s=0;        
       }
 

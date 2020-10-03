@@ -1,6 +1,14 @@
 #include <Arduino.h>
 #include <Fuzzy.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <SoftwareSerial.h>
+#include <ArduinoJson.h>
 
+
+#define ON 1
+#define OFF 0
 
 //Pins Define
    
@@ -9,6 +17,13 @@
 #define Nutrients_Valve D2
 #define Water_Valve D3
 
+//LCD Define
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+//Software serial
+SoftwareSerial s(D6,D5); //Rx D6 Tx D5
 
 //Global define
 
@@ -20,7 +35,16 @@ Fuzzy *fuzzy = new Fuzzy();
 bool FirstCycle = 1;
 bool FuzzyOK_pH = false;
 
+float Ph_Value = 0.0;
+float Tds_Value = 0.0;
+float ExtTemp = 0.0;
+float WaterTemp = 0.0;
+float ExtHum = 0.0;
+
+
 float input = 14;
+
+int DisplayRunning = 0;
 
 
 uint32_t ticks, last_tick_20ms, last_tick_1000ms,timmer_1s,timmer_2s, timmer_5s, timmer_1m, timmer_10m, timmer_30m, timmer_1h ;
@@ -29,13 +53,90 @@ uint32_t ticks, last_tick_20ms, last_tick_1000ms,timmer_1s,timmer_2s, timmer_5s,
 
 #pragma region Init Setup
 void setup() {
+  FirstCycle=1;
+
+  #pragma region Init display
+  //Init display
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
+  Serial.println("SSD1306 allocation failed");
+  for(;;); // Don't proceed, loop forever
+  }
+
+  delay(2000);
+  #pragma endregion
+
+  #pragma region Init serial port
   //Init serial port
   Serial.begin(115200);
+  while (!Serial) continue;
+
+  display.clearDisplay();
+  display.setCursor(20,5);
+  display.println("Serial port 1");
+  display.setCursor(0,15);
+  display.println("=====================");
+  display.setCursor(50,30);
+  display.println("OK");
+  display.setCursor(0,45);
+  display.println("=====================");
+  display.display();
+
+  delay(1500);
+#pragma endregion
+
+  #pragma region Init Software Serial port
+  //Init software serial port
+  s.begin(115200);
+
+  display.clearDisplay();
+  display.setCursor(20,5);
+  display.println("Serial port 2");
+  display.setCursor(0,15);
+  display.println("=====================");
+  display.setCursor(50,30);
+  display.println("OK");
+  display.setCursor(0,45);
+  display.println("=====================");
+  display.display();
+
+  delay(1500);
+  #pragma endregion
+
+  #pragma region Print splash screen
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(20,5);
+  display.println("Hidroponia V1.0");
+  display.setCursor(0,15);
+  display.println("=====================");
+  display.setCursor(25,30);
+  display.println("Joao Fontes");
+  display.setCursor(0,45);
+  display.println("=====================");
+  display.display();
+  delay(1500);
+  #pragma endregion
+  
   // Set a random seed, just for test purposes
   randomSeed(analogRead(0)); 
 
-   //Init fuzzy logi controller for pH
-   FuzzyOK_pH = InitFuzzyPh();
+#pragma region Init Fuzzy Logic pH pump
+  //Init fuzzy logi controller for pH
+  FuzzyOK_pH = InitFuzzyPh();  
+
+  display.clearDisplay();
+  display.setCursor(20,5);
+  display.println("Fuzzy Logic");
+  display.setCursor(0,15);
+  display.println("=====================");
+  display.setCursor(50,30);
+  display.println("OK");
+  display.setCursor(0,45);
+  display.println("=====================");
+  display.display();
+  #pragma endregion
+
   
 }
 #pragma endregion
@@ -43,21 +144,88 @@ void setup() {
 void loop() {
   // just for testing proposes
  
+ #pragma region Getting JSON info from arduino
+  DynamicJsonDocument jsonDoc(1000);
+  DeserializationError error = deserializeJson(jsonDoc, s);
+  if (error)
+  {
+    Serial.println("INVALID JSON FROM ARDUINO!!!");
+    //return;
+  }
+    
+  Ph_Value=jsonDoc["Ph_Value"];
+  Tds_Value=jsonDoc["Tds_Value"];
+  ExtTemp=jsonDoc["ExtTemp"];
+  ExtHum=jsonDoc["ExtHum"];
+  WaterTemp=jsonDoc["WaterTemp"];
+
+  #pragma endregion
+
   ticks = millis();
 
+      #pragma region First cycle
+  if(FirstCycle==ON)
+  {
+    display.clearDisplay();
+    display.setCursor(0,5);
+    display.println("RUNNING");
+    display.setCursor(0,15);
+    display.println("                      ");
+    display.setCursor(0,30);
+    display.println("                      ");
+    display.setCursor(0,45);
+    display.println("                      ");
+    display.setCursor(0,60);
+    display.println("                      ");
+    display.display();
+
+    FirstCycle=OFF;
+  }
+  #pragma endregion
+
+      #pragma region 20 ms loop
   //20ms timer Ph Samples
   if((ticks - last_tick_20ms) > 20)
   {
     
     last_tick_20ms=ticks;
   }
+  #pragma endregion
+
+      #pragma region 1 second loop
 
   //1000ms timer
   if ((ticks - last_tick_1000ms) > 1000)
     { 
 
-      #pragma region 1 second loop
+      #pragma region Display Update
+      if(DisplayRunning == 1)
+      {
+        display.clearDisplay();
+        display.setCursor(0,5);
+        display.println("RUNNING");
+        display.setCursor(120,5);
+        display.cp437(true);
+        display.write(0);          
+        display.display();
 
+        DisplayRunning=0;
+      }   
+      else
+      {
+        display.clearDisplay();
+        display.setCursor(0,5);
+        display.println("RUNNING");
+        display.setCursor(120,5);
+        display.cp437(true);
+        display.write(16);
+        display.display();
+
+        DisplayRunning=1;
+      }
+      #pragma endregion   
+
+      //only for testing
       if(input <= 5.0)
         input = 14.0;
         
@@ -93,7 +261,8 @@ void loop() {
 
       if(timmer_2s >= 2 or FirstCycle)
       {
-                
+
+            
         
         timmer_2s=0;
         
@@ -160,14 +329,13 @@ void loop() {
       {
 
         timmer_1h=0;
-      }
-
-      #pragma endregion
-      
+      }      
   
       last_tick_1000ms = ticks;
       
     } 
+    #pragma endregion
+
 
 }
 
