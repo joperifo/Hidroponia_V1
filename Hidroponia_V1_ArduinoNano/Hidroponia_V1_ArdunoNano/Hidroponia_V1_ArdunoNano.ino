@@ -18,6 +18,8 @@
 #define ONE_WIRE_BUS 3
 #define RelayPin_1 9
 #define RelayPin_2 10
+#define RxPin 5
+#define TxPin 6
 
 
 //Global define
@@ -37,7 +39,7 @@ dht DHT;
 GravityTDS SensorTDS;
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature WaterTempSensor(&oneWire);
-SoftwareSerial s(5,6); //Rx D5 Tx D6
+SoftwareSerial s(RxPin,TxPin); //Rx D5 Tx D6
 
 //Global Vars
 bool FirstCycle = 1;
@@ -66,10 +68,13 @@ float WaterTemp=0;
 
 #pragma region Init Setup
 void setup() {
+
+  pinMode(RxPin, INPUT);
+  pinMode(TxPin, OUTPUT);
   //Init Serial
   Serial.begin(115200);
   //Init Sotware Serial
-  s.begin(115200);
+  s.begin(4800);
   //OLED Display init
   Wire.begin();
   Wire.setClock(400000L);
@@ -226,25 +231,10 @@ void setup() {
 }
 #pragma endregion
 
-DynamicJsonDocument jsonDoc(1000);
-DeserializationError error = deserializeJson(jsonDoc, s);
+
 
 void loop() {
   
-  #pragma region Send values to JSON Serial
-
-  jsonDoc["Ph_Value"]=PhValue;
-  jsonDoc["Tds_Value"]=tdsValue;
-  jsonDoc["ExtTemp"]=Ext_Temperature;
-  jsonDoc["ExtHum"]=Ext_Temperature;
-  jsonDoc["WaterTemp"]=WaterTemp;
-
-  if(s.available()>0)
-  {
-    serializeJson(jsonDoc, s);
-  }
-  #pragma endregion
-
   ticks = millis();
 
   //20ms timer Ph Samples
@@ -303,6 +293,7 @@ void loop() {
 
       last_tick_800ms=ticks;
     }
+
   //1000ms timer
   if ((ticks - last_tick_1000ms) > 1000)
     { 
@@ -312,7 +303,22 @@ void loop() {
       timmer_1s++;
 
       if(timmer_1s >= 1)
-      {        
+      {     
+
+        #pragma region Send values to JSON Serial
+
+        StaticJsonDocument <1400> jsonDoc;
+
+        jsonDoc["Ph_Value"]=PhValue;
+        jsonDoc["Tds_Value"]=tdsValue;
+        jsonDoc["ExtTemp"]=Ext_Temperature;
+        jsonDoc["ExtHum"]=Ext_Temperature;
+        jsonDoc["WaterTemp"]=WaterTemp;
+
+        serializeJson(jsonDoc, s);
+  
+        #pragma endregion
+
         timmer_1s=0;        
       }
 

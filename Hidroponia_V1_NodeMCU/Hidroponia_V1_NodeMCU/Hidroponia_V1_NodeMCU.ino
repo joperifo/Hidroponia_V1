@@ -16,6 +16,8 @@
 #define Ph_Up_Valve D1
 #define Nutrients_Valve D2
 #define Water_Valve D3
+#define RxPin D6
+#define TxPin D5
 
 //LCD Define
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -23,7 +25,9 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 //Software serial
-SoftwareSerial s(D6,D5); //Rx D6 Tx D5
+SoftwareSerial s(RxPin,TxPin); //Rx D6 Tx D5
+
+DeserializationError error;
 
 //Global define
 
@@ -47,13 +51,15 @@ float input = 14;
 int DisplayRunning = 0;
 
 
-uint32_t ticks, last_tick_20ms, last_tick_1000ms,timmer_1s,timmer_2s, timmer_5s, timmer_1m, timmer_10m, timmer_30m, timmer_1h ;
+uint32_t ticks, last_tick_20ms, last_tick_500ms, last_tick_1000ms,timmer_1s,timmer_2s, timmer_5s, timmer_1m, timmer_10m, timmer_30m, timmer_1h ;
 
 
 
 #pragma region Init Setup
 void setup() {
   FirstCycle=1;
+  pinMode(RxPin, INPUT);
+  pinMode(TxPin, OUTPUT);
 
   #pragma region Init display
   //Init display
@@ -86,7 +92,7 @@ void setup() {
 
   #pragma region Init Software Serial port
   //Init software serial port
-  s.begin(115200);
+  s.begin(4800);
 
   display.clearDisplay();
   display.setCursor(20,5);
@@ -144,23 +150,7 @@ void setup() {
 void loop() {
   // just for testing proposes
  
- #pragma region Getting JSON info from arduino
-  DynamicJsonDocument jsonDoc(1000);
-  DeserializationError error = deserializeJson(jsonDoc, s);
-  if (error)
-  {
-    Serial.println("INVALID JSON FROM ARDUINO!!!");
-    //return;
-  }
-    
-  Ph_Value=jsonDoc["Ph_Value"];
-  Tds_Value=jsonDoc["Tds_Value"];
-  ExtTemp=jsonDoc["ExtTemp"];
-  ExtHum=jsonDoc["ExtHum"];
-  WaterTemp=jsonDoc["WaterTemp"];
-
-
-  #pragma endregion
+ 
 
   ticks = millis();
 
@@ -181,15 +171,43 @@ void loop() {
     display.display();
 
     FirstCycle=OFF;
-  }
+  } 
+  
   #pragma endregion
 
-      #pragma region 20 ms loop
+  #pragma region Getting JSON info from arduino
+  StaticJsonDocument <1700> jsonDoc;
+  error = deserializeJson(jsonDoc, s);
+  if (error)
+  {
+    Serial.println("INVALID JSON FROM ARDUINO!!!");
+    //return;
+  }
+  Ph_Value=jsonDoc["Ph_Value"];
+  Tds_Value=jsonDoc["Tds_Value"];
+  ExtTemp=jsonDoc["ExtTemp"];
+  ExtHum=jsonDoc["ExtHum"];
+  WaterTemp=jsonDoc["WaterTemp"];  
+
+  #pragma endregion
+
+    #pragma region 20 ms loop
   //20ms timer Ph Samples
   if((ticks - last_tick_20ms) > 20)
   {
+
+    
     
     last_tick_20ms=ticks;
+  }
+  #pragma endregion
+
+  #pragma region 500 ms loop
+  //500ms timer 
+  if((ticks - last_tick_500ms) > 500)
+  {    
+      
+    last_tick_500ms=ticks;
   }
   #pragma endregion
 
@@ -197,8 +215,7 @@ void loop() {
 
   //1000ms timer
   if ((ticks - last_tick_1000ms) > 1000)
-    { 
-
+    {       
       #pragma region Display Update
       if(DisplayRunning == 1)
       {
@@ -223,9 +240,9 @@ void loop() {
         display.display();
 
         DisplayRunning=1;
-      }
+      }      
       #pragma endregion   
-
+      
       //only for testing
       if(input <= 5.0)
         input = 14.0;
@@ -235,6 +252,8 @@ void loop() {
      #pragma region Print JSON values to Serial
       if(!error)
       {
+          Serial.println("\n----------------------------------------");
+          Serial.println("Values from sensors board");
           Serial.print("JSON pH Value=");
           Serial.println(Ph_Value);
           Serial.print("JSON Tds Value=");
@@ -245,22 +264,26 @@ void loop() {
           Serial.println(ExtHum);
           Serial.print("JSON Water Temperature=");
           Serial.println(WaterTemp);
+          Serial.println("----------------------------------------");
+
       }
       #pragma endregion
-
-      Serial.println("\n\nInput:");
-      Serial.print("\t\tPH:");
-      Serial.println(input);
+      Serial.println("Result Fuzzy logic pH output");
+      Serial.println("\nInput:");
+      Serial.print("\tPH:");
+      Serial.println(Ph_Value);
       // Set the random value as an input
-      fuzzy->setInput(1, input);
+      fuzzy->setInput(1, Ph_Value);
       // Running the Fuzzification
       fuzzy->fuzzify();
       // Running the Defuzzification
       float output = fuzzy->defuzzify(1);
       // Printing something
       Serial.println("Result: ");
-      Serial.print("\t\tPumpPulse: ");
+      Serial.print("\tPumpPulse: ");
       Serial.println(output);
+      Serial.println("----------------------------------------");
+
       
       timmer_1s++;
 
