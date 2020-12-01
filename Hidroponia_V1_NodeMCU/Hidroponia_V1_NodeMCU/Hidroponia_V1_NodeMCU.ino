@@ -60,13 +60,34 @@ SoftwareSerial s(RxPin,TxPin); //Rx D6 Tx D5
 
 DeserializationError error;
 
-//Global define
-Fuzzy *fuzzy = new Fuzzy();
+//parameters define
+int Tds_Value_ref=800;
 
+//Range for Set 1 - slighty_low
+int Fuzzy_tds_1_1 = Tds_Value_ref - (Tds_Value_ref/3);
+int Fuzzy_tds_1_2 = Fuzzy_tds_1_1 + ((Tds_Value_ref/3)/3);
+int Fuzzy_tds_1_3 = Fuzzy_tds_1_1 + 2*((Tds_Value_ref/3)/3);
+int Fuzzy_tds_1_4 = Tds_Value_ref;
+//Range for Set 1 - low
+int Fuzzy_tds_2_1 = Tds_Value_ref - (2*(Tds_Value_ref/3));
+int Fuzzy_tds_2_2 = Fuzzy_tds_2_1 + ((Tds_Value_ref/3)/3);
+int Fuzzy_tds_2_3 = Fuzzy_tds_2_1 + 2*((Tds_Value_ref/3)/3);
+int Fuzzy_tds_2_4 = Fuzzy_tds_1_1;
+//Range for Set 1 - too_low
+int Fuzzy_tds_3_1 = 0;
+int Fuzzy_tds_3_2 = Fuzzy_tds_3_1 + ((Tds_Value_ref/3)/3);
+int Fuzzy_tds_3_3 = Fuzzy_tds_3_1 + 2*((Tds_Value_ref/3)/3);
+int Fuzzy_tds_3_4 = Fuzzy_tds_2_1;
+
+
+//Global define
+Fuzzy *fuzzy_pH = new Fuzzy();
+Fuzzy *fuzzy_Nut = new Fuzzy();
 
 //Global Vars
 bool FirstCycle = 1;
 bool FuzzyOK_pH = false;
+bool FuzzyOK_Nutrients = false;
 
 float Ph_Value = 0.0;
 float Tds_Value = 0.0;
@@ -335,20 +356,37 @@ void loop() {
 
       }
       #pragma endregion
+      
       Serial.println("Result Fuzzy logic pH output");
       Serial.println("\nInput:");
       Serial.print("\tPH:");
       Serial.println(Ph_Value);
-      // Set the random value as an input
-      fuzzy->setInput(1, Ph_Value);
-      // Running the Fuzzification
-      fuzzy->fuzzify();
-      // Running the Defuzzification
-      float output = fuzzy->defuzzify(1);
+      // Set the random value as an input for pH
+      fuzzy_pH->setInput(1, Ph_Value);
+      // Running the Fuzzification for pH
+      fuzzy_pH->fuzzify();
+      // Running the Defuzzification for pH
+      float output = fuzzy_pH->defuzzify(1);
       // Printing something
       Serial.println("Result: ");
       Serial.print("\tPumpPulse: ");
       Serial.println(output);
+      Serial.println("----------------------------------------");
+
+      //Nutrients control from Tds value
+      Serial.println("Result Fuzzy logic Nutrients output");
+      Serial.print("\tTds:");
+      Serial.println(Tds_Value);
+      // Set the random value as an input for Tds
+      fuzzy_Nut->setInput(1, Tds_Value);
+      // Running the Fuzzification for Tds
+      fuzzy_Nut->fuzzify();
+      // Running the Defuzzification for Tds
+      float output_nut = fuzzy_Nut->defuzzify(1);
+      // Printing something
+      Serial.println("Result: ");
+      Serial.print("\tNutrients PumpPulse: ");
+      Serial.println(output_nut);
       Serial.println("----------------------------------------");
 
       
@@ -586,7 +624,7 @@ void loop() {
     // Including the FuzzySet into FuzzyInput
     ph->addFuzzySet(base);
     // Including the FuzzyInput into Fuzzy
-    fuzzy->addFuzzyInput(ph);
+    fuzzy_pH->addFuzzyInput(ph);
 
     // Instantiating a FuzzyOutput objects
     FuzzyOutput *phPumpPulse = new FuzzyOutput(1);
@@ -603,7 +641,7 @@ void loop() {
     // Including the FuzzySet into FuzzyOutput
     phPumpPulse->addFuzzySet(big);
     // Including the FuzzyOutput into Fuzzy
-    fuzzy->addFuzzyOutput(phPumpPulse);
+    fuzzy_pH->addFuzzyOutput(phPumpPulse);
     
     // Building FuzzyRule "IF ph = acid THEN phPumpPulse = small"
     // Instantiating a FuzzyRuleAntecedent objects
@@ -617,7 +655,7 @@ void loop() {
     // Instantiating a FuzzyRule objects
     FuzzyRule *fuzzyRule01 = new FuzzyRule(1, ifPhAcid, thenphPumpPulseSmall);
     // Including the FuzzyRule into Fuzzy
-    fuzzy->addFuzzyRule(fuzzyRule01);
+    fuzzy_pH->addFuzzyRule(fuzzyRule01);
 
     // Building FuzzyRule "IF ph = neutral THEN phPumpPulse = medium"
     // Instantiating a FuzzyRuleAntecedent objects
@@ -631,7 +669,7 @@ void loop() {
     // Instantiating a FuzzyRule objects
     FuzzyRule *fuzzyRule02 = new FuzzyRule(2, ifPhNeutral, thenphPumpPulseMedium);
     // Including the FuzzyRule into Fuzzy
-    fuzzy->addFuzzyRule(fuzzyRule02);
+    fuzzy_pH->addFuzzyRule(fuzzyRule02);
 
     // Building FuzzyRule "IF ph = base THEN phPumpPulse = big"
     // Instantiating a FuzzyRuleAntecedent objects
@@ -645,9 +683,90 @@ void loop() {
     // Instantiating a FuzzyRule objects
     FuzzyRule *fuzzyRule03 = new FuzzyRule(3, ifPhBase, thenphPumpPulseBig);
     // Including the FuzzyRule into Fuzzy
-    fuzzy->addFuzzyRule(fuzzyRule03);  
+    fuzzy_pH->addFuzzyRule(fuzzyRule03);  
 
     return true;
+}
+#pragma endregion
+
+#pragma region Nutrients pump
+bool InitFuzzyNutrients()
+{
+  // Instantiating a FuzzyInput object
+  FuzzyInput *tds_value = new FuzzyInput(1);
+  // Instantiating a FuzzySet object
+  FuzzySet *slightly_low = new FuzzySet(Fuzzy_tds_1_1, Fuzzy_tds_1_2, Fuzzy_tds_1_3, Fuzzy_tds_1_4);
+  // Including the FuzzySet into FuzzyInput
+  tds_value->addFuzzySet(slightly_low);
+  // Instantiating a FuzzySet object
+  FuzzySet *low = new FuzzySet(Fuzzy_tds_2_1, Fuzzy_tds_2_2, Fuzzy_tds_2_3, Fuzzy_tds_2_4);
+  // Including the FuzzySet into FuzzyInput
+  tds_value->addFuzzySet(low);
+  // Instantiating a FuzzySet object
+  FuzzySet *too_low = new FuzzySet(Fuzzy_tds_3_1, Fuzzy_tds_3_2, Fuzzy_tds_3_3, Fuzzy_tds_3_4);
+  // Including the FuzzySet into FuzzyInput
+  tds_value->addFuzzySet(too_low);
+  // Including the FuzzyInput into Fuzzy
+  fuzzy_Nut->addFuzzyInput(tds_value);
+
+  // Instantiating a FuzzyOutput objects
+  FuzzyOutput *NutPumpPulse = new FuzzyOutput(1);
+  // Instantiating a FuzzySet object
+  FuzzySet *small = new FuzzySet(500,2000, 2000, 3000);
+  // Including the FuzzySet into FuzzyOutput
+  NutPumpPulse->addFuzzySet(small);
+  // Instantiating a FuzzySet object
+  FuzzySet *medium = new FuzzySet(2000, 4000, 4000, 5000);
+  // Including the FuzzySet into FuzzyOutput
+  NutPumpPulse->addFuzzySet(medium);
+  // Instantiating a FuzzySet object
+  FuzzySet *big = new FuzzySet(4000, 5000, 7000, 8000);
+  // Including the FuzzySet into FuzzyOutput
+  NutPumpPulse->addFuzzySet(big);
+  // Including the FuzzyOutput into Fuzzy
+  fuzzy_Nut->addFuzzyOutput(NutPumpPulse);
+
+  // Building FuzzyRule "IF Tds value = slighlty_low THEN pump pulse = small"
+  // Instantiating a FuzzyRuleAntecedent objects
+  FuzzyRuleAntecedent *ifTdsSlightlyLow = new FuzzyRuleAntecedent();
+  // Creating a FuzzyRuleAntecedent with just a single FuzzySet
+  ifTdsSlightlyLow->joinSingle(slightly_low);
+  // Instantiating a FuzzyRuleConsequent objects
+  FuzzyRuleConsequent *thenNutPumpPulseSmall = new FuzzyRuleConsequent();
+  // Including a FuzzySet to this FuzzyRuleConsequent
+  thenNutPumpPulseSmall->addOutput(small);
+  // Instantiating a FuzzyRule objects
+  FuzzyRule *fuzzyRule01 = new FuzzyRule(1, ifTdsSlightlyLow, thenNutPumpPulseSmall);
+  // Including the FuzzyRule into Fuzzy
+  fuzzy_Nut->addFuzzyRule(fuzzyRule01);
+
+  // Building FuzzyRule "IF Tds value = low THEN pump pulse = medium"
+  // Instantiating a FuzzyRuleAntecedent objects
+  FuzzyRuleAntecedent *ifTdsLow = new FuzzyRuleAntecedent();
+  // Creating a FuzzyRuleAntecedent with just a single FuzzySet
+  ifTdsLow->joinSingle(low);
+  // Instantiating a FuzzyRuleConsequent objects
+  FuzzyRuleConsequent *thenNutPumpPulseMedium = new FuzzyRuleConsequent();
+  // Including a FuzzySet to this FuzzyRuleConsequent
+  thenNutPumpPulseMedium->addOutput(medium);
+  // Instantiating a FuzzyRule objects
+  FuzzyRule *fuzzyRule02 = new FuzzyRule(2, ifTdsLow, thenNutPumpPulseMedium);
+  // Including the FuzzyRule into Fuzzy
+  fuzzy_Nut->addFuzzyRule(fuzzyRule02);
+
+  // Building FuzzyRule "IF Tds value = too_low THEN pump pulse = Big"
+  // Instantiating a FuzzyRuleAntecedent objects
+  FuzzyRuleAntecedent *ifTdsTooLow = new FuzzyRuleAntecedent();
+  // Creating a FuzzyRuleAntecedent with just a single FuzzySet
+  ifTdsTooLow->joinSingle(too_low);
+  // Instantiating a FuzzyRuleConsequent objects
+  FuzzyRuleConsequent *thenNutPumpPulseBig = new FuzzyRuleConsequent();
+  // Including a FuzzySet to this FuzzyRuleConsequent
+  thenNutPumpPulseBig->addOutput(big);
+  // Instantiating a FuzzyRule objects
+  FuzzyRule *fuzzyRule03 = new FuzzyRule(3, ifTdsTooLow, thenNutPumpPulseBig);
+  // Including the FuzzyRule into Fuzzy
+  fuzzy_Nut->addFuzzyRule(fuzzyRule03);
 }
 #pragma endregion
 
