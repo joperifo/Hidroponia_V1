@@ -7,6 +7,13 @@
 #include <ArduinoJson.h>
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
+#include <WiFiManager.h>
+#include <ESP8266mDNS.h>
+#ifdef ESP8266
+#include <ESP8266mDNS.h>
+#elif defined(ESP32)
+#include <ESPmDNS.h>
+#endif
 
 #define ON 1
 #define OFF 0
@@ -42,11 +49,10 @@ PubSubClient client(mqtt_server, 1883, wifiClient);
 #pragma endregion
 
 //Pins Define
-   
-#define WaterPump D0
-#define Ph_Up_Valve D1
-#define Nutrients_Valve D2
-#define Water_Valve D3
+//OLED Display I2C D1 and D2
+#define BootModePin D0
+#define Ph_Up_PumpPin D3
+#define Nutrients_PumpPin D4
 #define RxPin D6
 #define TxPin D5
 
@@ -59,6 +65,16 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 SoftwareSerial s(RxPin,TxPin); //Rx D6 Tx D5
 
 DeserializationError error;
+
+//WiFi configuration vars
+
+unsigned int  timeout   = 120; // seconds to run for
+unsigned int  startTime = millis();
+bool portalRunning      = false;
+bool startAP            = false; // start AP and webserver if true, else start only webserver
+int BootModeCounter500ms = 0;
+
+WiFiManager wm;
 
 //parameters define
 int Tds_Value_ref=800;
@@ -109,8 +125,15 @@ uint32_t ticks, last_tick_20ms, last_tick_500ms, last_tick_1000ms,timmer_1s,timm
 void setup() {
 
   FirstCycle=1;
+
+  #pragma region Pins Init
   pinMode(RxPin, INPUT);
   pinMode(TxPin, OUTPUT);
+  pinMode(Nutrients_PumpPin, OUTPUT);
+  pinMode(Ph_Up_PumpPin, OUTPUT);
+  pinMode(BootModePin, INPUT_PULLUP);
+
+  #pragma endregion  
 
   #pragma region Init display
   //Init display
@@ -138,6 +161,8 @@ void setup() {
   display.println("=====================");
   display.display();
 
+  Serial.setDebugOutput(true);
+
   delay(1500);
 #pragma endregion
 
@@ -158,6 +183,16 @@ void setup() {
 
   delay(1500);
   #pragma endregion 
+
+  #pragma region WiFi Portal Start
+  WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP  
+  
+  wm.resetSettings();
+    
+  wm.setHostname("Hidroponia");
+  wm.autoConnect();
+
+  #pragma endregion
 
   #pragma region Init Mqtt 
   if(MqttEnable)
@@ -279,7 +314,7 @@ void loop() {
 
   #pragma endregion
 
-    #pragma region 20 ms loop
+  #pragma region 20 ms loop
   //20ms timer Ph Samples
   if((ticks - last_tick_20ms) > 20)
   {
@@ -294,12 +329,13 @@ void loop() {
   //500ms timer 
   if((ticks - last_tick_500ms) > 500)
   {    
+    
       
     last_tick_500ms=ticks;
   }
   #pragma endregion
 
-      #pragma region 1 second loop
+  #pragma region 1 second loop
 
   //1000ms timer
   if ((ticks - last_tick_1000ms) > 1000)
@@ -399,14 +435,17 @@ void loop() {
 
       #pragma endregion
 
-      #pragma region 2 second loop
+  #pragma region 2 second loop
 
       timmer_2s++;
 
       if(timmer_2s >= 2 or FirstCycle)
-      {
+      {      
 
-            
+        #ifdef ESP8266
+        MDNS.update();
+        #endif
+        doWiFiManager();        
         
         timmer_2s=0;
         
@@ -414,12 +453,12 @@ void loop() {
 
       #pragma endregion
 
-      #pragma region 5 seconds loop
+  #pragma region 5 seconds loop
 
       timmer_5s++;
 
       if(timmer_5s>5 or FirstCycle)
-        {                   
+        {                       
 
                  
         timmer_5s=0;
@@ -429,7 +468,7 @@ void loop() {
 
         #pragma endregion
 
-      #pragma region 1 minute loop
+  #pragma region 1 minute loop
 
       timmer_1m++;
 
@@ -441,7 +480,7 @@ void loop() {
 
       #pragma endregion
 
-      #pragma region 10 minute loop
+  #pragma region 10 minute loop
 
       timmer_10m++;
 
@@ -530,7 +569,7 @@ void loop() {
 
       #pragma endregion
 
-      #pragma region 30 minute loop
+  #pragma region 30 minute loop
 
       timmer_30m++;
 
@@ -542,7 +581,7 @@ void loop() {
 
       #pragma endregion
 
-      #pragma region 1 hour loop
+  #pragma region 1 hour loop
 
       timmer_1h++;
 
@@ -601,6 +640,42 @@ void loop() {
 }
  
  #pragma endregion
+
+#pragma region WiFi portal Aux functions
+
+void doWiFiManager(){
+  // is auto timeout portal running
+  if(portalRunning){
+    wm.process();
+    if((millis()-startTime) > (timeout*1000)){
+      Serial.println("portaltimeout");
+      portalRunning = false;
+      if(startAP){
+        wm.stopConfigPortal();
+      }  
+      else{
+        wm.stopWebPortal();
+      } 
+   }
+  }
+
+  // is configuration portal requested?
+  if(digitalRead(BootModePin) == LOW && (!portalRunning)) {
+    if(startAP){
+      Serial.println("Button Pressed, Starting Config Portal");
+      wm.setConfigPortalBlocking(false);
+      wm.startConfigPortal();
+    }  
+    else{
+      Serial.println("Button Pressed, Starting Web Portal");
+      wm.startWebPortal();
+    }  
+    portalRunning = true;
+    startTime = millis();
+  }
+}
+
+#pragma endregion
 
 #pragma endregion
 

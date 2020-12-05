@@ -17,7 +17,7 @@
 #define DHT11_PIN 2
 #define ONE_WIRE_BUS 3
 #define RelayPin_1 9
-#define RelayPin_2 10
+#define WaterPumpPin 10
 #define RxPin 5
 #define TxPin 6
 
@@ -46,6 +46,7 @@ bool FirstCycle = 1;
 double PhValue_mV;
 float PhValue;
 float Ext_Humidity, Ext_Temperature;
+float RefTdsValue = 900.0;
 
 //Ph vars
 int ph_samples = 20;
@@ -71,6 +72,11 @@ void setup() {
 
   pinMode(RxPin, INPUT);
   pinMode(TxPin, OUTPUT);
+  //Set Water pump Pin to output mode
+  pinMode(WaterPumpPin, OUTPUT);
+  //Set Water pump speed to 50%
+  analogWrite(WaterPumpPin,50);
+
   //Init Serial
   Serial.begin(115200);
   //Init Sotware Serial
@@ -399,6 +405,20 @@ void loop() {
 
       if(timmer_1m>60)
       {
+        #pragma region Control Water pump Speed
+        if(tdsValue>RefTdsValue + 300.0)
+        {
+          analogWrite(WaterPumpPin,90);
+        }
+        else if(tdsValue>RefTdsValue + 150.0)
+        {
+          analogWrite(WaterPumpPin,70);
+        }
+        else
+        {
+          analogWrite(WaterPumpPin,50);
+        }
+        #pragma endregion
 
         timmer_1m=0;
       }
