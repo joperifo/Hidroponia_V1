@@ -55,6 +55,7 @@ PubSubClient client(mqtt_server, 1883, wifiClient);
 #define Nutrients_PumpPin D4
 #define RxPin D6
 #define TxPin D5
+#define WifiConfigPin D7
 
 //LCD Define
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -68,11 +69,11 @@ DeserializationError error;
 
 //WiFi configuration vars
 
-unsigned int  timeout   = 120; // seconds to run for
+unsigned int  timeout   = 60; // seconds to run for
 unsigned int  startTime = millis();
 bool portalRunning      = false;
 bool startAP            = false; // start AP and webserver if true, else start only webserver
-int BootModeCounter500ms = 0;
+int BootModeCounter2s = 0;
 
 WiFiManager wm;
 
@@ -132,6 +133,7 @@ void setup() {
   pinMode(Nutrients_PumpPin, OUTPUT);
   pinMode(Ph_Up_PumpPin, OUTPUT);
   pinMode(BootModePin, INPUT_PULLUP);
+  pinMode(WifiConfigPin, INPUT_PULLUP);
 
   #pragma endregion  
 
@@ -185,12 +187,36 @@ void setup() {
   #pragma endregion 
 
   #pragma region WiFi Portal Start
-  WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP  
-  
-  wm.resetSettings();
-    
-  wm.setHostname("Hidroponia");
-  wm.autoConnect();
+
+  if(digitalRead(WifiConfigPin)==LOW)
+  {
+    Serial.println("");
+    Serial.println("#####################");
+    Serial.println("WIPE WIFI SETTINGS!!!");
+    Serial.println("#####################");
+    Serial.println("");
+    wm.resetSettings(); // wipe settings
+
+    display.clearDisplay();
+    display.setCursor(20,5);
+    display.println("Wi-Fi CONFIGS!");
+    display.setCursor(0,15);
+    display.println("=====================");
+    display.setCursor(30,30);
+    display.println("WIPED!!!");
+    display.setCursor(0,45);
+    display.println("=====================");
+    display.display();
+    delay(2000);
+
+  }
+
+  WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP      
+  wm.setHostname("ESP_Hidro");
+  wm.setShowStaticFields(true);
+  //Set a static ip address for configuration portal
+  wm.setAPStaticIPConfig(IPAddress(10,0,1,1), IPAddress(10,0,1,1), IPAddress(255,255,255,0));
+  wm.autoConnect("ESP_Hidro","password");
 
   #pragma endregion
 
@@ -439,9 +465,26 @@ void loop() {
 
       timmer_2s++;
 
+      if(digitalRead(BootModePin)==LOW)
+      {
+        BootModeCounter2s++;
+      }
+      if(BootModeCounter2s > 2)
+      {
+          wm.resetSettings();    
+          
+          wm.setConfigPortalBlocking(false);
+          wm.startConfigPortal();
+          wm.stopWebPortal();
+
+
+          BootModeCounter2s = 0;
+      }
+
+      
+
       if(timmer_2s >= 2 or FirstCycle)
       {      
-
         #ifdef ESP8266
         MDNS.update();
         #endif
